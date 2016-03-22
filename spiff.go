@@ -15,6 +15,7 @@ import (
 	"github.com/cloudfoundry-incubator/spiff/debug"
 	"github.com/cloudfoundry-incubator/spiff/dynaml"
 	"github.com/cloudfoundry-incubator/spiff/flow"
+	"github.com/cloudfoundry-incubator/spiff/password"
 	"github.com/cloudfoundry-incubator/spiff/yaml"
 )
 
@@ -59,12 +60,52 @@ func main() {
 				},
 			},
 			Action: func(c *cli.Context) {
-				if len(c.Args()) < 2 {
+				if len(c.Args()) > 2 || len(c.Args()) < 1 {
 					cli.ShowCommandHelp(c, "diff")
 					os.Exit(1)
 				}
 
 				diff(c.Args()[0], c.Args()[1], c.String("separator"))
+			},
+		},
+
+		{
+			Name:      "passwords",
+			ShortName: "p",
+			Usage:     "update password file/query password",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  "passphrase",
+					Usage: "passphrase used to de/encode passwords (default $SPIFF_PASSPHRASE)",
+				},
+			},
+			Action: func(c *cli.Context) {
+				if len(c.Args()) > 2 {
+					cli.ShowCommandHelp(c, "passwords")
+					os.Exit(1)
+				}
+
+				passwords(c.Args(), c.String("passphrase"))
+			},
+		},
+
+		{
+			Name:      "encrypt",
+			ShortName: "e",
+			Usage:     "encrypt string",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  "passphrase",
+					Usage: "passphrase used to de/encode passwords (default $SPIFF_PASSPHRASE)",
+				},
+			},
+			Action: func(c *cli.Context) {
+				if len(c.Args()) > 2 || len(c.Args()) < 1 {
+					cli.ShowCommandHelp(c, "encrypt")
+					os.Exit(1)
+				}
+
+				encrypt(c.Args(), c.String("passphrase"))
 			},
 		},
 	}
@@ -189,4 +230,48 @@ func diff(aFilePath, bFilePath string, separator string) {
 
 		fmt.Printf(separator)
 	}
+}
+
+func passwords(args []string, passphrase string) {
+	if passphrase == "" {
+		passphrase = os.Getenv("SPIFF_PASSPHRASE")
+	}
+	if passphrase == "" {
+		log.Fatalln(fmt.Sprintf("passphrase required to update password file %s", path.Clean(args[0])))
+	}
+	var err error
+	var p string
+	if len(args) == 2 {
+		p, err = password.GetPassword(args[1], args[0], passphrase)
+		fmt.Printf("%s: %s\n", args[1], p)
+	} else {
+		_, err = password.GetPasswordFile(args[0], passphrase)
+	}
+	if err != nil {
+		log.Fatalln(fmt.Sprintf("error during update of password file %s: ", path.Clean(args[0])), err)
+	}
+}
+
+func encrypt(args []string, passphrase string) {
+	if passphrase == "" {
+		passphrase = os.Getenv("SPIFF_PASSPHRASE")
+	}
+	if passphrase == "" {
+		log.Fatalln(fmt.Sprintf("passphrase required for encrypting '%s'", path.Clean(args[0])))
+	}
+	var err error
+	enc := password.TRIPPLEDES
+	if len(args) == 2 {
+		enc = args[1]
+	}
+	e, ok := password.GetEncoding(enc)
+	if !ok {
+		log.Fatalln(fmt.Sprintf("invalid encoding '%s'", args[1]))
+	}
+
+	r, err := e.Encode(args[0], passphrase)
+	if err != nil {
+		log.Fatalln(fmt.Sprintf("error during encrypting '%s': ", args[0]), err)
+	}
+	fmt.Printf("%s\n", r)
 }

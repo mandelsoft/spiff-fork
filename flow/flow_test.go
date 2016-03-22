@@ -2876,7 +2876,7 @@ status: failed
 		})
 	})
 
-	Describe("when resing from the environment", func() {
+	Describe("when reading from the environment", func() {
 		os.Setenv("TEST1", "alice")
 		os.Setenv("TEST2", "bob")
 		dynaml.ReloadEnv()
@@ -3079,6 +3079,20 @@ map:
     age: 24
   bob:
     age: 30
+`)
+			Expect(source).To(FlowAs(resolved))
+		})
+	})
+
+	Describe("when descrypting", func() {
+		It("handles explicit key", func() {
+			source := parseYAML(`
+---
+foo: (( decrypt("9559411911441d81cbd8e214f1e3483d5386891f070d5d4c05d6d3d7bc3f0804796ae760b3341f7e21f4a2e6ee090bb2","passwords") ))
+`)
+			resolved := parseYAML(`
+---
+foo: laber
 `)
 			Expect(source).To(FlowAs(resolved))
 		})

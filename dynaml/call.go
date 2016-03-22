@@ -99,6 +99,12 @@ func (e CallExpr) Evaluate(binding Binding, locally bool) (interface{}, Evaluati
 	case "format":
 		result, sub, ok = func_format(values, binding)
 
+	case "password":
+		result, sub, ok = func_password(values, binding)
+
+	case "decrypt":
+		result, sub, ok = func_decrypt(values, binding)
+
 	case "error":
 		result, sub, ok = func_error(values, binding)
 

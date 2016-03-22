@@ -1247,6 +1247,50 @@ map:
 
 In combination with templates and lambda expressions this can be used to generate maps with arbitrarily named key values, although dynaml expressions are not allowed for key values.
 
+### `(( password(tag,file) ))
+
+Using the `exec` command it is possible to access any external data source, for example accessing an encrypted
+password store of your choice to add tagged encrypted passwords to a deployment manifest. The function
+`passwords` provides a simple built-in alternative to easily externalize passwords into an encrypted file that
+can be stored in a source code management together with the other deployment information without exposing the
+used passwords.
+
+The yaml file stores a list of tagged entries, whose values are encrypted. It can directly be used to maintain the values. Any access to the file will automatically encrypt the manually modified content. Accessing a tag not yet maintained in the file will automatically generate a fresh complex password.
+
+The key used for encryption is taken by default from the environment variable `SPIFF_PASSPHRASE`. Optionally it can be specified as third argument to the `password` function.
+
+The file used to store the passwords looks like follows:
+
+```yaml
+encoding: 3DES
+encrypted: |-
+  f5831bea02418140311f84009e4ff5b0594f49cd51d140c7f8cb942c4b9baa75
+  c8e173429006cbd74f99d4452a7ea8125d8a791eedf864b3390d97027cedf26d
+  9b04d7ee6838a4db7508ba3ccb4186c898c8b1f40ace0781c4999fecfd2be307
+  e7d7abc6ef716af0083258008030bde62dac66d635777302bfcca2670a7f6b80
+  6d164441f902e0ffa6b7ff1c5b09dce8ab7b83c0ce766764065b41e03596d709
+  651bedec5d7ebbb28c0101ce4ea792255bf6ff7ec4ad16bc
+keys:
+  bla: <redacted>
+  blubber: <redacted>
+  new: <redacted>
+  other: <redacted>
+  test: <redacted>
+```
+
+So far the only available encryption method is tripple DES (3DES). The key
+section can be manually maintained by changing values (other than
+*<redacted>*), adding or deleting entries. Accessing the file with
+the `password` function will automatically  adapt the encrypted content
+according to the manual changes.
+
+Optionally there is a spiff command flavor to directly access the password
+file:
+- `spiff passwords [--passphrase <phrase>] <password file>` updates the
+  file according to manual changes 
+- `spiff passwords [--passphrase <phrase>] <password file> <tag>` retrieves
+  a dedicated password
+
 ## `(( lambda |x|->x ":" port ))`
 
 Lambda expressions can be used to define additional anonymous functions. They can be assigned to yaml nodes as values and referenced with path expressions to call the function with approriate arguments in other dynaml expressions. For the final document they are mapped to string values.
