@@ -63,6 +63,7 @@ Contents:
 		- [(( read("file.yml") ))](#-readfileyml-)
 		- [(( static_ips(0, 1, 3) ))](#-static_ips0-1-3-)
 		- [(( list_to_map(list, "key") ))](#-list_to_maplist-key-)
+		- [(( password(tag, file) ))](#-passwordtag-file-)))
 	- [(( lambda |x|->x ":" port ))](#-lambda-x-x--port-)
 	- [(( &temporary ))](#-temporary-)
 	- [Mappings](#mappings)
@@ -1247,13 +1248,12 @@ map:
 
 In combination with templates and lambda expressions this can be used to generate maps with arbitrarily named key values, although dynaml expressions are not allowed for key values.
 
-### `(( password(tag,file) ))
+### `(( password(tag, file) ))`
 
 Using the `exec` command it is possible to access any external data source, for example accessing an encrypted
 password store of your choice to add tagged encrypted passwords to a deployment manifest. The function
 `passwords` provides a simple built-in alternative to easily externalize passwords into an encrypted file that
-can be stored in a source code management together with the other deployment information without exposing the
-used passwords.
+can be stored in a source code management system together with the other deployment information without exposing the used passwords.
 
 The yaml file stores a list of tagged entries, whose values are encrypted. It can directly be used to maintain the values. Any access to the file will automatically encrypt the manually modified content. Accessing a tag not yet maintained in the file will automatically generate a fresh complex password.
 
@@ -1280,8 +1280,8 @@ keys:
 
 So far the only available encryption method is tripple DES (3DES). The key
 section can be manually maintained by changing values (other than
-*<redacted>*), adding or deleting entries. Accessing the file with
-the `password` function will automatically  adapt the encrypted content
+`<redacted>`), adding or deleting entries. Accessing the file with
+the `password` function will automatically adapt the encrypted content
 according to the manual changes.
 
 Optionally there is a spiff command flavor to directly access the password
