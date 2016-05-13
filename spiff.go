@@ -23,7 +23,7 @@ func main() {
 	app := cli.NewApp()
 	app.Name = "spiff"
 	app.Usage = "BOSH deployment manifest toolkit"
-	app.Version = "1.0.8-dev.4"
+	app.Version = "1.0.8-dev.5"
 
 	app.Commands = []cli.Command{
 		{
@@ -47,6 +47,19 @@ func main() {
 				}
 				debug.DebugFlag = c.Bool("debug")
 				merge(c.Args()[0], c.Bool("partial"), c.Args()[1:])
+			},
+		},
+		{
+			Name:      "sort",
+			ShortName: "s",
+			Usage:     "structurally sort maps i a YAML file",
+			Action: func(c *cli.Context) {
+				if len(c.Args()) > 1 || len(c.Args()) < 1 {
+					cli.ShowCommandHelp(c, "sort")
+					os.Exit(1)
+				}
+
+				sort(c.Args()[0])
 			},
 		},
 		{
@@ -172,6 +185,33 @@ func merge(templateFilePath string, partial bool, stubFilePaths []string) {
 		flowed = dynaml.ResetUnresolvedNodes(flowed)
 	}
 	yaml, err := candiedyaml.Marshal(flowed)
+	if err != nil {
+		log.Fatalln("error marshalling manifest:", err)
+	}
+
+	fmt.Println(string(yaml))
+}
+
+func sort(templateFilePath string) {
+	var templateFile []byte
+	var err error
+
+	if templateFilePath == "-" {
+		templateFile, err = ioutil.ReadAll(os.Stdin)
+	} else {
+		templateFile, err = ioutil.ReadFile(templateFilePath)
+	}
+
+	if err != nil {
+		log.Fatalln(fmt.Sprintf("error reading template [%s]:", path.Clean(templateFilePath)), err)
+	}
+
+	templateYAML, err := yaml.Parse(templateFilePath, templateFile)
+	if err != nil {
+		log.Fatalln(fmt.Sprintf("error parsing template [%s]:", path.Clean(templateFilePath)), err)
+	}
+
+	yaml, err := candiedyaml.Marshal(templateYAML)
 	if err != nil {
 		log.Fatalln("error marshalling manifest:", err)
 	}

@@ -139,13 +139,7 @@ func GetPassword(tag string, path string, key string) (string, error) {
 	v, ok := p.node[tag]
 	if !ok {
 		debug.Debug("no entry for password key %s\n", tag)
-		buf := make([]byte, 32)
-		if _, err := io.ReadFull(rand.Reader, buf); err != nil {
-			panic(err)
-		}
-
-		randomKey := base64.StdEncoding.EncodeToString(buf)
-		v = yaml.NewNode(randomKey, p.path)
+		v = createPassword()
 		p.node[tag] = v
 		SavePasswordFile(p)
 	}
@@ -247,4 +241,13 @@ func SavePasswordFile(p *PasswordFile) {
 	raw[KEYS] = yaml.NewNode(keys, p.path)
 	out, err = candiedyaml.Marshal(raw)
 	ioutil.WriteFile(p.path, out, 0660)
+}
+
+func createPassword() yaml.Node {
+	buf := make([]byte, 32)
+	if _, err := io.ReadFull(rand.Reader, buf); err != nil {
+		panic(err)
+	}
+	randomKey := base64.StdEncoding.EncodeToString(buf)
+	return yaml.NewNode(randomKey, "")
 }
