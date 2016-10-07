@@ -11,11 +11,11 @@ import (
 	"github.com/codegangsta/cli"
 
 	"github.com/cloudfoundry-incubator/candiedyaml"
-	"github.com/cloudfoundry-incubator/spiff/compare"
-	"github.com/cloudfoundry-incubator/spiff/debug"
-	"github.com/cloudfoundry-incubator/spiff/dynaml"
-	"github.com/cloudfoundry-incubator/spiff/flow"
-	"github.com/cloudfoundry-incubator/spiff/yaml"
+	"github.com/mandelsoft/spiff/compare"
+	"github.com/mandelsoft/spiff/debug"
+	"github.com/mandelsoft/spiff/dynaml"
+	"github.com/mandelsoft/spiff/flow"
+	"github.com/mandelsoft/spiff/yaml"
 )
 
 func main() {
