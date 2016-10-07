@@ -105,7 +105,17 @@ Contents:
 
 Official release executable binaries can be downloaded via [Github releases](https://github.com/mandelsoft/spiff/releases) for Darwin and Linux machines (and virtual machines).
 
-Some of spiff's dependencies have changed since the last official release, and spiff will not be updated to keep up with these dependencies.  Working dependencies are vendored in the `Godeps` directory (more information on the `godep` tool is available [here](https://github.com/tools/godep)).  As such, trying to `go get` spiff will likely fail; the only supported way to use spiff is to use an official binary release.
+## Build from Source
+
+It's recommended to compile sources with Go 1.7 or newer. For dependency management this project makes use of the [vendor feature](https://docs.google.com/document/d/1Bz5-UB7g2uPBdOx-rw5t9MxJwkfpx90cqG9AFL0JAYo/edit). With that dependencies are taken from the vendor directory and not from the GOPATH.
+
+```
+go build ./...               # build all go sources
+go build -a ./...            # build all go sources and dependent packages
+go test ./...                # run all tests
+go install                   # install executable in $GOPATH/bin
+
+``` 
 
 # Usage
 
