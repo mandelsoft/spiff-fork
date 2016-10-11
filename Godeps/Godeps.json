@@ -5,12 +5,12 @@
 	"Deps": [
 		{
 			"ImportPath": "github.com/cloudfoundry-incubator/candiedyaml",
-			"Rev": "99c3df83b51532e3615f851d8c2dbb638f5313bf"
+			"Rev": "4e924c79e32959414e8c7aaed6607176d8ee79c3"
 		},
 		{
 			"ImportPath": "github.com/codegangsta/cli",
-			"Comment": "v1.18.0-69-g55f715e",
-			"Rev": "55f715e28c46073d0e217e2ce8eb46b0b45e3db6"
+			"Comment": "v1.6.0",
+			"Rev": "9b2bd2b3489748d4d0a204fa4eb2ee9e89e0ebc6"
 		},
 		{
 			"ImportPath": "github.com/onsi/ginkgo",

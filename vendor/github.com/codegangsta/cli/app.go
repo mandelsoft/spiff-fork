@@ -5,41 +5,19 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
-	"path/filepath"
-	"reflect"
-	"sort"
 	"strings"
+	"text/tabwriter"
+	"text/template"
 	"time"
 )
 
-var (
-	changeLogURL                    = "https://github.com/urfave/cli/blob/master/CHANGELOG.md"
-	appActionDeprecationURL         = fmt.Sprintf("%s#deprecated-cli-app-action-signature", changeLogURL)
-	runAndExitOnErrorDeprecationURL = fmt.Sprintf("%s#deprecated-cli-app-runandexitonerror", changeLogURL)
-
-	contactSysadmin = "This is an error in the application.  Please contact the distributor of this application if this is not you."
-
-	errNonFuncAction = NewExitError("ERROR invalid Action type.  "+
-		fmt.Sprintf("Must be a func of type `cli.ActionFunc`.  %s", contactSysadmin)+
-		fmt.Sprintf("See %s", appActionDeprecationURL), 2)
-	errInvalidActionSignature = NewExitError("ERROR invalid Action signature.  "+
-		fmt.Sprintf("Must be `cli.ActionFunc`.  %s", contactSysadmin)+
-		fmt.Sprintf("See %s", appActionDeprecationURL), 2)
-)
-
-// App is the main structure of a cli application. It is recommended that
-// an app be created with the cli.NewApp() function
+// App is the main structure of a cli application. It is recomended that
+// and app be created with the cli.NewApp() function
 type App struct {
-	// The name of the program. Defaults to path.Base(os.Args[0])
+	// The name of the program. Defaults to os.Args[0]
 	Name string
-	// Full name of command for help, defaults to Name
-	HelpName string
 	// Description of the program.
 	Usage string
-	// Text to override the USAGE section of help
-	UsageText string
-	// Description of the program argument format.
-	ArgsUsage string
 	// Version of the program
 	Version string
 	// List of commands to execute
@@ -50,46 +28,30 @@ type App struct {
 	EnableBashCompletion bool
 	// Boolean to hide built-in help command
 	HideHelp bool
-	// Boolean to hide built-in version flag and the VERSION section of help
+	// Boolean to hide built-in version flag
 	HideVersion bool
-	// Populate on app startup, only gettable through method Categories()
-	categories CommandCategories
 	// An action to execute when the bash-completion flag is set
-	BashComplete BashCompleteFunc
+	BashComplete func(context *Context)
 	// An action to execute before any subcommands are run, but after the context is ready
 	// If a non-nil error is returned, no subcommands are run
-	Before BeforeFunc
+	Before func(context *Context) error
 	// An action to execute after any subcommands are run, but after the subcommand has finished
 	// It is run even if Action() panics
-	After AfterFunc
-
+	After func(context *Context) error
 	// The action to execute when no subcommands are specified
-	// Expects a `cli.ActionFunc` but will accept the *deprecated* signature of `func(*cli.Context) {}`
-	// *Note*: support for the deprecated `Action` signature will be removed in a future version
-	Action interface{}
-
+	Action func(context *Context)
 	// Execute this function if the proper command cannot be found
-	CommandNotFound CommandNotFoundFunc
-	// Execute this function if an usage error occurs
-	OnUsageError OnUsageErrorFunc
+	CommandNotFound func(context *Context, command string)
 	// Compilation date
 	Compiled time.Time
 	// List of all authors who contributed
 	Authors []Author
-	// Copyright of the binary if any
-	Copyright string
 	// Name of Author (Note: Use App.Authors, this is deprecated)
 	Author string
 	// Email of Author (Note: Use App.Authors, this is deprecated)
 	Email string
 	// Writer writer to write output to
 	Writer io.Writer
-	// ErrWriter writes error output
-	ErrWriter io.Writer
-	// Other custom info
-	Metadata map[string]interface{}
-
-	didSetup bool
 }
 
 // Tries to find out when this binary was compiled.
@@ -102,14 +64,11 @@ func compileTime() time.Time {
 	return info.ModTime()
 }
 
-// NewApp creates a new cli Application with some reasonable defaults for Name,
-// Usage, Version and Action.
+// Creates a new cli Application with some reasonable defaults for Name, Usage, Version and Action.
 func NewApp() *App {
 	return &App{
-		Name:         filepath.Base(os.Args[0]),
-		HelpName:     filepath.Base(os.Args[0]),
+		Name:         os.Args[0],
 		Usage:        "A new cli application",
-		UsageText:    "",
 		Version:      "0.0.0",
 		BashComplete: DefaultAppComplete,
 		Action:       helpCommand.Action,
@@ -118,29 +77,33 @@ func NewApp() *App {
 	}
 }
 
-// Setup runs initialization code to ensure all data structures are ready for
-// `Run` or inspection prior to `Run`.  It is internally called by `Run`, but
-// will return early if setup has already happened.
-func (a *App) Setup() {
-	if a.didSetup {
-		return
-	}
-
-	a.didSetup = true
-
+// Entry point to the cli app. Parses the arguments slice and routes to the proper flag/args combination
+func (a *App) Run(arguments []string) (err error) {
 	if a.Author != "" || a.Email != "" {
 		a.Authors = append(a.Authors, Author{Name: a.Author, Email: a.Email})
 	}
 
-	newCmds := []Command{}
-	for _, c := range a.Commands {
-		if c.HelpName == "" {
-			c.HelpName = fmt.Sprintf("%s %s", a.HelpName, c.Name)
-		}
-		newCmds = append(newCmds, c)
-	}
-	a.Commands = newCmds
+	if HelpPrinter == nil {
+		defer func() {
+			HelpPrinter = nil
+		}()
 
+		HelpPrinter = func(templ string, data interface{}) {
+			funcMap := template.FuncMap{
+				"join": strings.Join,
+			}
+
+			w := tabwriter.NewWriter(a.Writer, 0, 8, 1, '\t', 0)
+			t := template.Must(template.New("help").Funcs(funcMap).Parse(templ))
+			err := t.Execute(w, data)
+			if err != nil {
+				panic(err)
+			}
+			w.Flush()
+		}
+	}
+
+	// append help to commands
 	if a.Command(helpCommand.Name) == nil && !a.HideHelp {
 		a.Commands = append(a.Commands, helpCommand)
 		if (HelpFlag != BoolFlag{}) {
@@ -148,6 +111,7 @@ func (a *App) Setup() {
 		}
 	}
 
+	//append version/help flags
 	if a.EnableBashCompletion {
 		a.appendFlag(BashCompletionFlag)
 	}
@@ -156,78 +120,51 @@ func (a *App) Setup() {
 		a.appendFlag(VersionFlag)
 	}
 
-	a.categories = CommandCategories{}
-	for _, command := range a.Commands {
-		a.categories = a.categories.AddCommand(command.Category, command)
-	}
-	sort.Sort(a.categories)
-
-	if a.Metadata == nil {
-		a.Metadata = make(map[string]interface{})
-	}
-}
-
-// Run is the entry point to the cli app. Parses the arguments slice and routes
-// to the proper flag/args combination
-func (a *App) Run(arguments []string) (err error) {
-	a.Setup()
-
 	// parse flags
 	set := flagSet(a.Name, a.Flags)
 	set.SetOutput(ioutil.Discard)
 	err = set.Parse(arguments[1:])
 	nerr := normalizeFlags(a.Flags, set)
-	context := NewContext(a, set, nil)
 	if nerr != nil {
 		fmt.Fprintln(a.Writer, nerr)
+		context := NewContext(a, set, set)
 		ShowAppHelp(context)
+		fmt.Fprintln(a.Writer)
 		return nerr
+	}
+	context := NewContext(a, set, set)
+
+	if err != nil {
+		fmt.Fprintf(a.Writer, "Incorrect Usage.\n\n")
+		ShowAppHelp(context)
+		fmt.Fprintln(a.Writer)
+		return err
 	}
 
 	if checkCompletions(context) {
 		return nil
 	}
 
-	if err != nil {
-		if a.OnUsageError != nil {
-			err := a.OnUsageError(context, err, false)
-			HandleExitCoder(err)
-			return err
-		}
-		fmt.Fprintf(a.Writer, "%s\n\n", "Incorrect Usage.")
-		ShowAppHelp(context)
-		return err
-	}
-
-	if !a.HideHelp && checkHelp(context) {
-		ShowAppHelp(context)
+	if checkHelp(context) {
 		return nil
 	}
 
-	if !a.HideVersion && checkVersion(context) {
-		ShowVersion(context)
+	if checkVersion(context) {
 		return nil
 	}
 
 	if a.After != nil {
 		defer func() {
-			if afterErr := a.After(context); afterErr != nil {
-				if err != nil {
-					err = NewMultiError(err, afterErr)
-				} else {
-					err = afterErr
-				}
-			}
+			// err is always nil here.
+			// There is a check to see if it is non-nil
+			// just few lines before.
+			err = a.After(context)
 		}()
 	}
 
 	if a.Before != nil {
-		beforeErr := a.Before(context)
-		if beforeErr != nil {
-			fmt.Fprintf(a.Writer, "%v\n\n", beforeErr)
-			ShowAppHelp(context)
-			HandleExitCoder(beforeErr)
-			err = beforeErr
+		err := a.Before(context)
+		if err != nil {
 			return err
 		}
 	}
@@ -242,26 +179,19 @@ func (a *App) Run(arguments []string) (err error) {
 	}
 
 	// Run default Action
-	err = HandleAction(a.Action, context)
-
-	HandleExitCoder(err)
-	return err
+	a.Action(context)
+	return nil
 }
 
-// RunAndExitOnError calls .Run() and exits non-zero if an error was returned
-//
-// Deprecated: instead you should return an error that fulfills cli.ExitCoder
-// to cli.App.Run. This will cause the application to exit with the given eror
-// code in the cli.ExitCoder
+// Another entry point to the cli app, takes care of passing arguments and error handling
 func (a *App) RunAndExitOnError() {
 	if err := a.Run(os.Args); err != nil {
-		fmt.Fprintln(a.errWriter(), err)
-		OsExiter(1)
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
 	}
 }
 
-// RunAsSubcommand invokes the subcommand given the context, parses ctx.Args() to
-// generate command-specific flags
+// Invokes the subcommand given the context, parses ctx.Args() to generate command-specific flags
 func (a *App) RunAsSubcommand(ctx *Context) (err error) {
 	// append help to commands
 	if len(a.Commands) > 0 {
@@ -273,15 +203,6 @@ func (a *App) RunAsSubcommand(ctx *Context) (err error) {
 		}
 	}
 
-	newCmds := []Command{}
-	for _, c := range a.Commands {
-		if c.HelpName == "" {
-			c.HelpName = fmt.Sprintf("%s %s", a.HelpName, c.Name)
-		}
-		newCmds = append(newCmds, c)
-	}
-	a.Commands = newCmds
-
 	// append flags
 	if a.EnableBashCompletion {
 		a.appendFlag(BashCompletionFlag)
@@ -292,32 +213,27 @@ func (a *App) RunAsSubcommand(ctx *Context) (err error) {
 	set.SetOutput(ioutil.Discard)
 	err = set.Parse(ctx.Args().Tail())
 	nerr := normalizeFlags(a.Flags, set)
-	context := NewContext(a, set, ctx)
+	context := NewContext(a, set, ctx.globalSet)
 
 	if nerr != nil {
 		fmt.Fprintln(a.Writer, nerr)
-		fmt.Fprintln(a.Writer)
 		if len(a.Commands) > 0 {
 			ShowSubcommandHelp(context)
 		} else {
 			ShowCommandHelp(ctx, context.Args().First())
 		}
+		fmt.Fprintln(a.Writer)
 		return nerr
+	}
+
+	if err != nil {
+		fmt.Fprintf(a.Writer, "Incorrect Usage.\n\n")
+		ShowSubcommandHelp(context)
+		return err
 	}
 
 	if checkCompletions(context) {
 		return nil
-	}
-
-	if err != nil {
-		if a.OnUsageError != nil {
-			err = a.OnUsageError(context, err, true)
-			HandleExitCoder(err)
-			return err
-		}
-		fmt.Fprintf(a.Writer, "%s\n\n", "Incorrect Usage.")
-		ShowSubcommandHelp(context)
-		return err
 	}
 
 	if len(a.Commands) > 0 {
@@ -332,23 +248,16 @@ func (a *App) RunAsSubcommand(ctx *Context) (err error) {
 
 	if a.After != nil {
 		defer func() {
-			afterErr := a.After(context)
-			if afterErr != nil {
-				HandleExitCoder(err)
-				if err != nil {
-					err = NewMultiError(err, afterErr)
-				} else {
-					err = afterErr
-				}
-			}
+			// err is always nil here.
+			// There is a check to see if it is non-nil
+			// just few lines before.
+			err = a.After(context)
 		}()
 	}
 
 	if a.Before != nil {
-		beforeErr := a.Before(context)
-		if beforeErr != nil {
-			HandleExitCoder(beforeErr)
-			err = beforeErr
+		err := a.Before(context)
+		if err != nil {
 			return err
 		}
 	}
@@ -363,13 +272,12 @@ func (a *App) RunAsSubcommand(ctx *Context) (err error) {
 	}
 
 	// Run default Action
-	err = HandleAction(a.Action, context)
+	a.Action(context)
 
-	HandleExitCoder(err)
-	return err
+	return nil
 }
 
-// Command returns the named command on App. Returns nil if the command does not exist
+// Returns the named command on App. Returns nil if the command does not exist
 func (a *App) Command(name string) *Command {
 	for _, c := range a.Commands {
 		if c.HasName(name) {
@@ -380,46 +288,6 @@ func (a *App) Command(name string) *Command {
 	return nil
 }
 
-// Categories returns a slice containing all the categories with the commands they contain
-func (a *App) Categories() CommandCategories {
-	return a.categories
-}
-
-// VisibleCategories returns a slice of categories and commands that are
-// Hidden=false
-func (a *App) VisibleCategories() []*CommandCategory {
-	ret := []*CommandCategory{}
-	for _, category := range a.categories {
-		if visible := func() *CommandCategory {
-			for _, command := range category.Commands {
-				if !command.Hidden {
-					return category
-				}
-			}
-			return nil
-		}(); visible != nil {
-			ret = append(ret, visible)
-		}
-	}
-	return ret
-}
-
-// VisibleCommands returns a slice of the Commands with Hidden=false
-func (a *App) VisibleCommands() []Command {
-	ret := []Command{}
-	for _, command := range a.Commands {
-		if !command.Hidden {
-			ret = append(ret, command)
-		}
-	}
-	return ret
-}
-
-// VisibleFlags returns a slice of the Flags with Hidden=false
-func (a *App) VisibleFlags() []Flag {
-	return visibleFlags(a.Flags)
-}
-
 func (a *App) hasFlag(flag Flag) bool {
 	for _, f := range a.Flags {
 		if flag == f {
@@ -428,16 +296,6 @@ func (a *App) hasFlag(flag Flag) bool {
 	}
 
 	return false
-}
-
-func (a *App) errWriter() io.Writer {
-
-	// When the app ErrWriter is nil use the package level one.
-	if a.ErrWriter == nil {
-		return ErrWriter
-	}
-
-	return a.ErrWriter
 }
 
 func (a *App) appendFlag(flag Flag) {
@@ -460,43 +318,4 @@ func (a Author) String() string {
 	}
 
 	return fmt.Sprintf("%v %v", a.Name, e)
-}
-
-// HandleAction uses ✧✧✧reflection✧✧✧ to figure out if the given Action is an
-// ActionFunc, a func with the legacy signature for Action, or some other
-// invalid thing.  If it's an ActionFunc or a func with the legacy signature for
-// Action, the func is run!
-func HandleAction(action interface{}, context *Context) (err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			// Try to detect a known reflection error from *this scope*, rather than
-			// swallowing all panics that may happen when calling an Action func.
-			s := fmt.Sprintf("%v", r)
-			if strings.HasPrefix(s, "reflect: ") && strings.Contains(s, "too many input arguments") {
-				err = NewExitError(fmt.Sprintf("ERROR unknown Action error: %v.", r), 2)
-			} else {
-				panic(r)
-			}
-		}
-	}()
-
-	if reflect.TypeOf(action).Kind() != reflect.Func {
-		return errNonFuncAction
-	}
-
-	vals := reflect.ValueOf(action).Call([]reflect.Value{reflect.ValueOf(context)})
-
-	if len(vals) == 0 {
-		return nil
-	}
-
-	if len(vals) > 1 {
-		return errInvalidActionSignature
-	}
-
-	if retErr, ok := vals[0].Interface().(error); vals[0].IsValid() && ok {
-		return retErr
-	}
-
-	return err
 }
